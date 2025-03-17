@@ -1,46 +1,92 @@
-const { app, BrowserWindow, Tray, Menu } = require('electron');
-const path = require('path');
+import { app, BrowserWindow, Menu, dialog, shell } from "electron";
+import express from "express";
+import { SerialPort } from "serialport";
 
-let tray = null;
-let mainWindow = null;
+let mainWindow;
 
-app.whenReady().then(() => {
-    // Create system tray icon
-    tray = new Tray(path.join(__dirname, 'icon.png')); // Add a custom icon
-    const contextMenu = Menu.buildFromTemplate([
-        { label: 'Open ElectroBlocks', click: () => createWindow() },
-        { type: 'separator' },
-        { label: 'Quit', click: () => app.quit() }
-    ]);
-    tray.setToolTip('ElectroBlocks Tray App');
-    tray.setContextMenu(contextMenu);
+// Start Express Server Inside Electron
+const startExpressServer = () => {
+  const expressApp = express();
+  const PORT = 4000;
 
-    // Create window when clicking tray icon
-    tray.on('click', () => {
-        if (mainWindow) {
-            mainWindow.show();
-        } else {
-            createWindow();
-        }
-    });
-});
+  expressApp.get("/ports", async (req, res) => {
+    try {
+      const ports = await SerialPort.list();
+      res.json(ports.map((port) => ({
+        path: port.path,
+        manufacturer: port.manufacturer || "Unknown",
+        vendorId: port.vendorId || "N/A",
+        productId: port.productId || "N/A",
+        serialNumber: port.serialNumber || "N/A"
+      })));
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 
-function createWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1200,
-        height: 800,
-        webPreferences: {
-            nodeIntegration: false
-        }
-    });
-    mainWindow.loadURL('https://electroblocks.org'); // Load the ElectroBlocks web app
+  expressApp.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}/ports`);
+  });
+};
 
-    mainWindow.on('closed', () => {
-        mainWindow = null;
-    });
-}
+// Function to Get Available Ports
+const getAvailablePorts = async () => {
+  try {
+    const ports = await SerialPort.list();
+    return ports;
+  } catch (error) {
+    return [];
+  }
+};
 
-// Quit when all windows are closed (except on macOS)
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+// Create Electron Window
+app.whenReady().then(async () => {
+  mainWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    webPreferences: {
+      nodeIntegration: false,
+    },
+  });
+
+  const availablePorts = await getAvailablePorts();
+
+  const menuTemplate = [
+    {
+      label: "Ports",
+      submenu: [
+        ...(
+          availablePorts.length
+            ? availablePorts.map((port) => ({
+                label: port.path,
+                click: () => {
+                  dialog.showMessageBox({
+                    type: "info",
+                    title: "Port Info",
+                    message: JSON.stringify({
+                      path: port.path,
+                      manufacturer: port.manufacturer || "Unknown",
+                      vendorId: port.vendorId || "N/A",
+                      productId: port.productId || "N/A",
+                      serialNumber: port.serialNumber || "N/A"
+                    }, null, 2),
+                  });
+                },
+              }))
+            : [{ label: "No ports available" }]
+        ),
+        { type: "separator" }, 
+        {
+          label: "View Ports Online",
+          click: () => {
+            shell.openExternal("http://localhost:4000/ports"); // Opens in browser
+          },
+        },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(menuTemplate);
+  Menu.setApplicationMenu(menu);
+  startExpressServer();
 });
