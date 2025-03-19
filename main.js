@@ -1,46 +1,127 @@
-const { app, BrowserWindow, Tray, Menu } = require('electron');
-const path = require('path');
+import { app, BrowserWindow, Menu, dialog } from "electron";
+import { SerialPort } from "serialport";
+import fs from "fs";
 
-let tray = null;
-let mainWindow = null;
+let mainWindow;
+let selectedPortPath = "";
+let selectedFilePath = "";
 
-app.whenReady().then(() => {
-    // Create system tray icon
-    tray = new Tray(path.join(__dirname, 'icon.png')); // Add a custom icon
-    const contextMenu = Menu.buildFromTemplate([
-        { label: 'Open ElectroBlocks', click: () => createWindow() },
-        { type: 'separator' },
-        { label: 'Quit', click: () => app.quit() }
-    ]);
-    tray.setToolTip('ElectroBlocks Tray App');
-    tray.setContextMenu(contextMenu);
+// Get Available Ports
+const getAvailablePorts = async () => {
+    try {
+        return await SerialPort.list();
+    } catch (error) {
+        return [];
+    }
+};
 
-    // Create window when clicking tray icon
-    tray.on('click', () => {
-        if (mainWindow) {
-            mainWindow.show();
-        } else {
-            createWindow();
+const refreshPorts = async () => {
+    const availablePorts = await getAvailablePorts();
+    const portMenu = availablePorts.length
+        ? availablePorts.map((port) => ({
+            label: port.path,
+            click: () => {
+                selectedPortPath = port.path;
+                dialog.showMessageBox({
+                    type: "info",
+                    title: "Port Connected",
+                    message: `✅ ${port.path} is connected`
+                });
+            }
+        }))
+        : [{ label: "No ports available" }];
+
+    const menuTemplate = [
+        {
+            label: "Ports",
+            submenu: [
+                ...portMenu,
+                { type: "separator" },
+                { label: "Refresh Ports", click: refreshPorts }
+            ]
+        },
+        {
+            label: "File",
+            submenu: [
+                {
+                    label: "Upload Python Code",
+                    click: async () => {
+                        const result = await dialog.showOpenDialog({
+                            properties: ["openFile"],
+                            filters: [{ name: "Python Files", extensions: ["py"] }]
+                        });
+
+                        if (!result.canceled && result.filePaths.length > 0) {
+                            if (!result.filePaths[0].endsWith(".py")) {
+                                dialog.showErrorBox("Error", "Please select a valid .py file.");
+                                return;
+                            }
+                            selectedFilePath = result.filePaths[0];
+                            dialog.showMessageBox({
+                                type: "info",
+                                title: "File Uploaded",
+                                message: "✔️ File uploaded successfully to Electron!"
+                            });
+                        }
+                    }
+                },
+                {
+                    label: "Upload Code to Arduino",
+                    click: sendPythonCodeToArduino
+                }
+            ]
         }
-    });
-});
+    ];
 
-function createWindow() {
+    const menu = Menu.buildFromTemplate(menuTemplate);
+    Menu.setApplicationMenu(menu);
+};
+
+const sendPythonCodeToArduino = () => {
+    if (!selectedPortPath) {
+        dialog.showErrorBox("Error", "Please select a port first.");
+        return;
+    }
+
+    if (!selectedFilePath) {
+        dialog.showErrorBox("Error", "Please upload a Python file first.");
+        return;
+    }
+
+    const arduino = new SerialPort({ path: selectedPortPath, baudRate: 9600 });
+
+    fs.readFile(selectedFilePath, "utf-8", (err, data) => {
+        if (err) {
+            dialog.showErrorBox("Error", `Failed to read file: ${err.message}`);
+            return;
+        }
+
+        arduino.write(data, (error) => {
+            if (error) {
+                dialog.showErrorBox("Error", `Failed to send data: ${error.message}`);
+            } else {
+                arduino.drain(() => {
+                    dialog.showMessageBox({
+                        type: "info",
+                        title: "Success",
+                        message: "✅ Python code uploaded successfully to Arduino!"
+                    });
+                    arduino.close();  // Port Management Enhancement: Close port after data transmission
+                });
+            }
+        });
+    });
+};
+
+app.whenReady().then(async () => {
     mainWindow = new BrowserWindow({
-        width: 1200,
-        height: 800,
+        width: 800,
+        height: 600,
         webPreferences: {
-            nodeIntegration: false
+            nodeIntegration: true,
+            contextIsolation: false
         }
     });
-    mainWindow.loadURL('https://electroblocks.org'); // Load the ElectroBlocks web app
 
-    mainWindow.on('closed', () => {
-        mainWindow = null;
-    });
-}
-
-// Quit when all windows are closed (except on macOS)
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    await refreshPorts();  // Load ports initially
 });
