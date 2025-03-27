@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino WebSocket</title>
+    <style>
+        body {
+            display: flex;
+            height: 100vh;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .upload-box {
+            border: 3px solid black;
+            padding: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 300px;
+            margin-bottom: 20px;
+        }
+
+        .success-message {
+            color: green;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="upload-box" onclick="uploadFile()">Upload File</div>
+    <div id="file-status" class="success-message"></div>
+
+    <button onclick="uploadToArduino()">Upload Code to Arduino</button>
+    <div id="upload-status" class="success-message"></div>
+
+    <div id="port-status" class="success-message"></div>
+
+    <script>
+        const { ipcRenderer } = require("electron");
+
+        function uploadFile() {
+            ipcRenderer.send("upload-file");
+        }
+
+        function uploadToArduino() {
+            ipcRenderer.send("upload-arduino-code");
+        }
+
+        ipcRenderer.on("file-uploaded", (event, message) => {
+            document.getElementById("file-status").innerText = message;
+        });
+
+        ipcRenderer.on("upload-success", (event, message) => {
+            document.getElementById("upload-status").innerText = message;
+        });
+
+        ipcRenderer.on("port-selected", (event, message) => {
+            document.getElementById("port-status").innerText = message;
+        });
+    </script>
+</body>
+</html>
