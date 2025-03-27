@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElectroBlocks Tray App</title>
+</head>
+<body>
+    <h1>ElectroBlocks Tray App</h1>
+    <button id="refresh-ports">Refresh Ports</button>
+    <button id="view-ports-online">View Ports Online</button>
+
+    <ul id="ports"></ul>
+
+    <script>
+        async function fetchPorts() {
+            try {
+                const response = await fetch("http://localhost:4000/ports");
+                const ports = await response.json();
+                const portsList = document.getElementById("ports");
+                portsList.innerHTML = "";
+
+                if (ports.length === 0) {
+                    portsList.innerHTML = "<li>No ports available</li>";
+                    return;
+                }
+
+                ports.forEach(port => {
+                    const listItem = document.createElement("li");
+                    listItem.textContent = `${port.path} - ${port.manufacturer || "Unknown"}`;
+                    portsList.appendChild(listItem);
+                });
+            } catch (error) {
+                console.error("Error fetching ports:", error);
+                document.getElementById("ports").innerHTML = "<li>Error fetching ports</li>";
+            }
+        }
+
+        document.getElementById("refresh-ports").addEventListener("click", fetchPorts);
+        document.getElementById("view-ports-online").addEventListener("click", () => {
+            window.open("http://localhost:4000/ports", "_blank");
+        });
+
+        fetchPorts();
+    </script>
+</body>
+</html>
