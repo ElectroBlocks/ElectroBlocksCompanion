@@ -1,16 +1,17 @@
-import { app, BrowserWindow, Tray, Menu, dialog, shell } from "electron";
+import { app, Tray, Menu, dialog, shell } from "electron";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { SerialPort } from "serialport";
+import fs from "fs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-let mainWindow, tray;
+let tray;
 
 const startExpressServer = () => {
   const expressApp = express();
-
   const staticPath = path.join(__dirname, "ElectroBlocks", "build");
+
   expressApp.use(express.static(staticPath));
 
   expressApp.get("/ports", async (req, res) => {
@@ -22,8 +23,7 @@ const startExpressServer = () => {
           manufacturer: port.manufacturer || "Unknown",
           serialNumber: port.serialNumber || "N/A",
           vendorId: port.vendorId || "N/A",
-          productId: port.productId || "N/A",
-          pnpId: port.pnpId || "N/A",
+          productId: port.productId || "N/A"
         }))
       );
     } catch (error) {
@@ -31,81 +31,61 @@ const startExpressServer = () => {
     }
   });
 
-  expressApp.listen(4000, () => console.log("Server running on port 4000"));
+  expressApp.get("*", (req, res) => {
+    const indexPath = path.join(staticPath, "index.html");
+    fs.readFile(indexPath, "utf8", (err, data) => {
+      if (err) {
+        res.status(500).send("Could not load app");
+      } else {
+        res.send(data);
+      }
+    });
+  });
+
+  expressApp.listen(4000);
 };
 
 const updatePortsMenu = async () => {
-  const availablePorts = await SerialPort.list();
-  const portsSubmenu = availablePorts.length
-    ? availablePorts.map(port => ({
-        label: port.path,
-        click: () =>
+  const ports = await SerialPort.list();
+
+  const portItems = ports.length
+    ? ports.map(port => ({
+        label: `${port.path} (${port.manufacturer || "Unknown"})`,
+        click: () => {
           dialog.showMessageBox({
             type: "info",
             title: "Port Info",
-            message: JSON.stringify(
-              {
-                Path: port.path,
-                Manufacturer: port.manufacturer || "Unknown",
-                "Serial Number": port.serialNumber || "N/A",
-                "Vendor ID": port.vendorId || "N/A",
-                "Product ID": port.productId || "N/A",
-                "PnP ID": port.pnpId || "N/A",
-              },
-              null,
-              2
-            ),
-          }),
+            message: `Path: ${port.path}\nManufacturer: ${port.manufacturer || "Unknown"}\nSerial Number: ${port.serialNumber || "N/A"}\nVendor ID: ${port.vendorId || "N/A"}\nProduct ID: ${port.productId || "N/A"}`
+          });
+        }
       }))
     : [{ label: "No ports available", enabled: false }];
 
-  portsSubmenu.push(
+  portItems.push(
     { type: "separator" },
     { label: "Refresh Ports", click: updatePortsMenu },
-    {
-      label: "View Ports Online",
-      click: () => shell.openExternal("http://localhost:4000/ports"),
-    }
+    { label: "View Ports (JSON)", click: () => shell.openExternal("http://localhost:4000/ports") }
   );
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([{ label: "Ports", submenu: portsSubmenu }])
-  );
-};
 
-const createWindow = async () => {
-  if (mainWindow) return mainWindow.show();
+  const contextMenu = Menu.buildFromTemplate([
+    { label: "Ports", submenu: portItems },
+    { type: "separator" },
+    { label: "Open ElectroBlocks", click: () => shell.openExternal("http://localhost:4000") },
+    { type: "separator" },
+    { label: "Quit", click: () => app.quit() }
+  ]);
 
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  // Load local server (localhost) inside Electron window
-  mainWindow.loadURL("http://localhost:4000").catch(err => {
-    console.error("Failed to load localhost:4000:", err);
-  });
-
-  mainWindow.on("closed", () => (mainWindow = null));
-  await updatePortsMenu();
+  tray.setContextMenu(contextMenu);
 };
 
 app.whenReady().then(() => {
   tray = new Tray(path.join(__dirname, "icon.png"));
   tray.setToolTip("ElectroBlocks Tray App");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Open ElectroBlocks", click: createWindow },
-      { type: "separator" },
-      { label: "Quit", click: () => app.quit() },
-    ])
-  );
-  tray.on("click", createWindow);
+  tray.on("click", () => shell.openExternal("http://localhost:4000"));
   startExpressServer();
   updatePortsMenu();
 });
 
-app.on("window-all-closed", () => process.platform !== "darwin" && app.quit());
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
