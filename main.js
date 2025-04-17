@@ -4,13 +4,30 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { SerialPort } from "serialport";
 import fs from "fs";
+import AdmZip from "adm-zip";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let tray;
 
+const unzipBuildIfNeeded = () => {
+  const zipPath = path.join(__dirname, "build.zip");
+  const buildPath = path.join(__dirname, "build");
+
+  if (fs.existsSync(zipPath) && !fs.existsSync(buildPath)) {
+    try {
+      const zip = new AdmZip(zipPath);
+      zip.extractAllTo(buildPath, true);
+      fs.unlinkSync(zipPath);
+      console.log("Unzipped build.zip and deleted the zip file.");
+    } catch (err) {
+      console.error("Error unzipping build.zip:", err);
+    }
+  }
+};
+
 const startExpressServer = () => {
   const expressApp = express();
-  const staticPath = path.join(__dirname,"build");
+  const staticPath = path.join(__dirname, "build");
 
   expressApp.use(express.static(staticPath));
 
@@ -79,9 +96,12 @@ const updatePortsMenu = async () => {
 };
 
 app.whenReady().then(() => {
+  unzipBuildIfNeeded();
   tray = new Tray(path.join(__dirname, "icon.png"));
   tray.setToolTip("ElectroBlocks Tray App");
-  tray.on("click", () => shell.openExternal("http://localhost:4000"));
+  tray.on("click", () => tray.popUpContextMenu());
+  tray.on("right-click", () => tray.popUpContextMenu());
+
   startExpressServer();
   updatePortsMenu();
 });
