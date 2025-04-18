@@ -99,6 +99,8 @@ app.whenReady().then(() => {
   unzipBuildIfNeeded();
   tray = new Tray(path.join(__dirname, "icon.png"));
   tray.setToolTip("ElectroBlocks Tray App");
+
+  // Show menu on left click (for Windows/Linux), and right click (macOS)
   tray.on("click", () => tray.popUpContextMenu());
   tray.on("right-click", () => tray.popUpContextMenu());
 
