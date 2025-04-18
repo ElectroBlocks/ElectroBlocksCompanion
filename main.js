@@ -12,18 +12,29 @@ let tray;
 const unzipBuildIfNeeded = () => {
   const zipPath = path.join(__dirname, "build.zip");
   const buildPath = path.join(__dirname, "build");
+  const tempPath = path.join(__dirname, "temp_unzip");
 
   if (fs.existsSync(zipPath) && !fs.existsSync(buildPath)) {
     try {
       const zip = new AdmZip(zipPath);
-      zip.extractAllTo(buildPath, true);
+      zip.extractAllTo(tempPath, true);
+
+      const innerBuildPath = path.join(tempPath, "build");
+      if (fs.existsSync(innerBuildPath)) {
+        fs.renameSync(innerBuildPath, buildPath);
+        fs.rmSync(tempPath, { recursive: true, force: true });
+      } else {
+        fs.renameSync(tempPath, buildPath);
+      }
+
       fs.unlinkSync(zipPath);
-      console.log("Unzipped build.zip and deleted the zip file.");
+      console.log("Extracted build.zip");
     } catch (err) {
       console.error("Error unzipping build.zip:", err);
     }
   }
 };
+
 
 const startExpressServer = () => {
   const expressApp = express();
