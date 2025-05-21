@@ -6,23 +6,17 @@ import { SerialPort } from "serialport";
 import fs from "fs";
 import AdmZip from "adm-zip";
 import { exec } from "child_process";
-import os from "os"; // For system Downloads path
+import os from "os";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let tray;
-
-// Project paths
 const downloadsBaseDir = path.join(__dirname, "downloads");
 const sketchName = "electroblocks_code";
 const inoFolder = path.join(downloadsBaseDir, sketchName);
 const inoFilePath = path.join(inoFolder, `${sketchName}.ino`);
 const hexFilePath = path.join(inoFolder, `${sketchName}.hex`);
-
-// System Downloads path
 const userDownloads = path.join(os.homedir(), "Downloads");
 const downloadedInoPath = path.join(userDownloads, `${sketchName}.ino`);
-
-// Auto move .ino file from system Downloads to project folder
 const startInoWatcher = () => {
   setInterval(() => {
     if (fs.existsSync(downloadedInoPath)) {
@@ -35,7 +29,7 @@ const startInoWatcher = () => {
         console.error("Error moving .ino file:", err);
       }
     }
-  }, 3000); // Every 3 seconds
+  }, 3000);
 };
 
 const unzipBuildIfNeeded = () => {
@@ -92,15 +86,13 @@ const startExpressServer = () => {
   if (!fs.existsSync(inoFilePath)) {
     return res.status(400).json({ error: "No .ino file found to compile." });
   }
-
-  // Detect board using arduino-cli
   exec("arduino-cli board list", (err, stdout, stderr) => {
     if (err) {
       console.error("Board detection failed:", stderr || err.message);
       return res.status(500).json({ error: "Board detection failed." });
     }
 
-    let fqbn = "arduino:avr:uno"; // Default
+    let fqbn = "arduino:avr:uno";
     const lines = stdout.split("\n");
 
     for (const line of lines) {
